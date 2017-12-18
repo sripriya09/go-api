@@ -19,23 +19,24 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	_ "github.com/denisenkom/go-mssqldb"
+	"github.com/gin-gonic/gin"
 )
 
 var (
-	password      = flag.String("password", "test123", "the database password")
-	port     *int = flag.Int("port", 1433, "the database port")
-	server        = flag.String("server", "localhost", "the database server")
-	user          = flag.String("user", "sa", "the database user")
-	database      = flag.String("database", "md", "the database name")
-	metadataFolder = "D:/htdocs/metadata"
+	password            = flag.String("password", "test123", "the database password")
+	port           *int = flag.Int("port", 1433, "the database port")
+	server              = flag.String("server", "localhost", "the database server")
+	user                = flag.String("user", "sa", "the database user")
+	database            = flag.String("database", "goDB", "the database name")
+	metadataFolder      = "D:/htdocs/metadata"
 )
 
 func main() {
 	flag.Parse()
-	
+
 	connString := fmt.Sprintf("server=%s;user id=%s;password=%s;port=%d", *server, *user, *password, *port)
+	fmt.Println(connString)
 	conn, err := sql.Open("mssql", connString)
 	checkError(err)
 	defer conn.Close()
@@ -48,7 +49,7 @@ func main() {
 		ApiRouter := gin.Default()
 		addRecord(conn, ApiRouter)
 		getRecords(conn, ApiRouter)
-		updateRecord(conn, ApiRouter)		
+		updateRecord(conn, ApiRouter)
 		deleteRecord(conn, ApiRouter)
 		ApiRouter.Run()
 	}
@@ -72,7 +73,7 @@ func getDB(conn *sql.DB, router *gin.Engine) {
 	var dbArray []string
 	values := make([]string, dbCount)
 	valuePtrs := make([]interface{}, dbCount)
-	
+
 	for dbRows.Next() {
 		for i := 0; i < dbCount; i++ {
 			valuePtrs[i] = &values[i]
@@ -81,17 +82,17 @@ func getDB(conn *sql.DB, router *gin.Engine) {
 		for j := 0; j < dbCount; j++ {
 			dbArray = append(dbArray, values[j])
 			generateMetadata(conn, values[j])
-		}			
-	}
-	
-	router.GET("/databases", func(c *gin.Context) {		
-		result := gin.H {
-			"databases": dbArray,
-			"count": dbCount,
 		}
-		
+	}
+
+	router.GET("/databases", func(c *gin.Context) {
+		result := gin.H{
+			"databases": dbArray,
+			"count":     len(dbArray),
+		}
+
 		c.JSON(http.StatusOK, result)
-	})			
+	})
 }
 
 //CREATE API - Inserts the record in table
@@ -101,7 +102,7 @@ func getDB(conn *sql.DB, router *gin.Engine) {
 // @Accept  json
 // @Param   db  	path    string     true        "Database Name"
 // @Param   table 	path   	string     true        "Table Name"
-// @Success 200 {object} gin.H	"Success. Record added successfully."	
+// @Success 200 {object} gin.H	"Success. Record added successfully."
 // @Failure 404 {object} gin.H  "Given database or table or field not found"
 // @Resource /:db/:table
 // @Router / [post]
@@ -113,17 +114,17 @@ func addRecord(conn *sql.DB, router *gin.Engine) {
 		table := c.Param("table")
 		db := c.Param("db")
 		isTable, tableData := checkTable(table, db)
-		
+
 		if isTable {
 			col, val := getFormData(c)
-			
+
 			if checkFields(tableData, col) {
 				keys := strings.Join(col, ",")
 				ph := "?" + strings.Repeat(",?", len(val)-1)
-				
+
 				stmt, err := conn.Prepare("use " + db + " insert into " + table + " (" + keys + ") values (" + ph + ");")
 				_, err = stmt.Exec(val...)
-				
+
 				if err != nil {
 					message = err.Error()
 				} else {
@@ -136,9 +137,9 @@ func addRecord(conn *sql.DB, router *gin.Engine) {
 			}
 		} else {
 			message = "Table not found"
-			status = http.StatusNotFound  
+			status = http.StatusNotFound
 		}
-		
+
 		c.JSON(status, gin.H{
 			"message": fmt.Sprintf(message),
 		})
@@ -149,35 +150,35 @@ func addRecord(conn *sql.DB, router *gin.Engine) {
 
 // @Title readRecords
 // @Description Retrieves records from a given table in a given database
-// @Produce  json  
+// @Produce  json
 // @Param   db  	path    string     true        "Database Name"
 // @Param   table 	path   	string     true        "Table Name"
-// @Success 200 {object} gin.H	"Success. Records from given table are fetched"	
+// @Success 200 {object} gin.H	"Success. Records from given table are fetched"
 // @Failure 404 {object} gin.H  "Given database or table not found"
 // @Resource /:db/:table
 // @Router / [get]
 
 func getRecords(conn *sql.DB, router *gin.Engine) {
-	
+
 	router.GET("/:db/:table", func(c *gin.Context) {
 		var status int
 		var result gin.H
 		table := c.Param("table")
 		db := c.Param("db")
 		isTable, _ := checkTable(table, db)
-		
+
 		if isTable {
 			recordRows, err := conn.Query("use " + db + " select * from " + table)
 			checkError(err)
 			defer recordRows.Close()
-			
+
 			columns, err := recordRows.Columns()
 			checkError(err)
 			recordCount := len(columns)
 			tableData := make([]map[string]interface{}, 0)
 			values := make([]interface{}, recordCount)
 			valuePtrs := make([]interface{}, recordCount)
-			
+
 			for recordRows.Next() {
 				for i := 0; i < recordCount; i++ {
 					valuePtrs[i] = &values[i]
@@ -197,19 +198,19 @@ func getRecords(conn *sql.DB, router *gin.Engine) {
 				}
 				tableData = append(tableData, record)
 			}
-			
+
 			status = http.StatusOK
-			result = gin.H {
+			result = gin.H{
 				"result": tableData,
-				"count": recordCount,
+				"count":  len(tableData),
 			}
 		} else {
-			status = http.StatusNotFound  
-			result = gin.H {
+			status = http.StatusNotFound
+			result = gin.H{
 				"message": "Table not found",
 			}
 		}
-		
+
 		c.JSON(status, result)
 	})
 }
@@ -222,35 +223,35 @@ func getRecords(conn *sql.DB, router *gin.Engine) {
 // @Param   db  			path    string     	true        "Database Name"
 // @Param   table 			path   	string		true        "Table Name"
 // @Param   primary_key 	path   	int     	true        "Primary Key"
-// @Success 200 {object} gin.H	"Success. Record updated successfully"	
+// @Success 200 {object} gin.H	"Success. Record updated successfully"
 // @Failure 404 {object} gin.H  "Given database or table or field not found"
 // @Resource /:db/:table
 // @Router / [put]
 
 func updateRecord(conn *sql.DB, router *gin.Engine) {
-	
+
 	router.PUT("/:db/:table", func(c *gin.Context) {
 		var status int
 		var message string
 		table := c.Param("table")
 		db := c.Param("db")
 		isTable, tableData := checkTable(table, db)
-		
+
 		if isTable {
 			col, val := getFormData(c)
-			
+
 			if checkFields(tableData, col) {
 				pk := tableData.Primary_key
 				pkValue := c.Request.URL.Query()[pk][0]
-				
+
 				data := col[0] + " = ?"
 				for i := 1; i < len(col); i++ {
 					data = data + ", " + col[i] + " = ?"
 				}
-				
+
 				stmt, err := conn.Prepare("use " + db + " update " + table + " SET " + data + " where " + pk + " = " + pkValue)
 				_, err = stmt.Exec(val...)
-	
+
 				if err != nil {
 					message = err.Error()
 				} else {
@@ -265,7 +266,7 @@ func updateRecord(conn *sql.DB, router *gin.Engine) {
 			status = http.StatusNotFound
 			message = "Table not found"
 		}
-		
+
 		c.JSON(status, gin.H{
 			"message": fmt.Sprintf(message),
 		})
@@ -275,29 +276,29 @@ func updateRecord(conn *sql.DB, router *gin.Engine) {
 //DELETE API - Deletes a particular record in a given table
 
 // @Title deleteRecord
-// @Description Deletes record in a given table in a given database  
+// @Description Deletes record in a given table in a given database
 // @Param   db  			path    string     	true        "Database Name"
 // @Param   table 			path   	string		true        "Table Name"
 // @Param   primary_key 	path   	int     	true        "Primary Key"
-// @Success 200 {object} "Success. Record deleted successfully"	
+// @Success 200 {object} "Success. Record deleted successfully"
 // @Failure 404 {object} "Given database or table not found"
 // @Resource /:db/:table
 // @Router / [delete]
 
 func deleteRecord(conn *sql.DB, router *gin.Engine) {
 	router.DELETE("/:db/:table", func(c *gin.Context) {
-		var status int 
+		var status int
 		var message string
 		table := c.Param("table")
 		db := c.Param("db")
 		isTable, tableData := checkTable(table, db)
-		
+
 		if isTable {
 			pk := tableData.Primary_key
 			pkValue := c.Request.URL.Query()[pk][0]
-			
+
 			_, err := conn.Query("use " + db + " delete from " + table + " where " + pk + " = " + pkValue)
-		
+
 			if err != nil {
 				message = err.Error()
 			} else {
@@ -308,7 +309,7 @@ func deleteRecord(conn *sql.DB, router *gin.Engine) {
 			status = http.StatusNotFound
 			message = "Table not found"
 		}
-		
+
 		c.JSON(status, gin.H{
 			"message": fmt.Sprintf(message),
 		})
@@ -324,6 +325,6 @@ func getFormData(c *gin.Context) (col []string, val []interface{}) {
 		col = append(col, key)
 		val = append(val, value[0])
 	}
-	
+
 	return
 }
